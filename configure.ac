@@ -1,10 +1,10 @@
 AC_PREREQ([2.68])
-AC_INIT([libheif], [1.5.0], [opensource@struktur.de])
+AC_INIT([libheif], [1.5.1], [opensource@struktur.de])
 AC_CONFIG_SRCDIR([libheif/box.cc])
 AC_CONFIG_HEADERS([config.h])
 
 # Note: do not forget to set the version in the CMakeLists.txt file accordingly
-NUMERIC_VERSION=0x01050000 # Numeric representation of the version (A.B.C[.D] = 0xAABBCCDD)
+NUMERIC_VERSION=0x01050100 # Numeric representation of the version (A.B.C[.D] = 0xAABBCCDD)
 AC_SUBST(NUMERIC_VERSION)
 
 # From https://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html:
@@ -42,7 +42,7 @@ AM_CONDITIONAL([HAVE_GO], [test "x$GO" != "xno" && test "x$GO" != "x"])
 AC_SUBST(HAVE_GO)
 
 AC_ARG_ENABLE([examples], AS_HELP_STRING([--disable-examples],
-    [Disable building examples.]), [enable_examples=no], [enable_examples=yes])
+    [Disable building examples.]), [], [enable_examples=yes])
 AM_CONDITIONAL([WITH_EXAMPLES], [test "x$enable_examples" = "xyes"])
 AC_SUBST(WITH_EXAMPLES)
 
@@ -70,17 +70,19 @@ AC_ARG_ENABLE([visibility], AS_HELP_STRING([--disable-visibility],
     [Disable visibility definitions.]),
     [HAVE_VISIBILITY=0],
     [gl_VISIBILITY])
-AM_CONDITIONAL([HAVE_VISIBILITY], [test "x$HAVE_VISIBILITY" != "x0"])
-if eval "test x$enable_visibility = x" ; then enable_visibility=yes ; fi
-
 
 AC_ARG_ENABLE([tests], AS_HELP_STRING([--enable-tests],
-    [Enable compiling tests ('visibility' must be disabled).]))
+    [Enable compiling tests ('visibility' will be disabled).]))
 AS_IF([test "x$enable_tests" = "xyes"], [
     HAVE_TESTS=1
+    enable_visibility=no
+    HAVE_VISIBILITY=0
+    CFLAG_VISIBILITY=
 ])
 AM_CONDITIONAL([HAVE_TESTS], [test "x$HAVE_TESTS" == "x1"])
 
+AM_CONDITIONAL([HAVE_VISIBILITY], [test "x$HAVE_VISIBILITY" != "x0"])
+if eval "test x$enable_visibility = x" ; then enable_visibility=yes ; fi
 
 PKG_CHECK_MODULES([libde265], [libde265], [
     AC_DEFINE([HAVE_LIBDE265], [1], [Whether libde265 was found.])
@@ -213,7 +215,7 @@ AC_MSG_NOTICE([JPEG output: $have_libjpeg])
 AC_MSG_NOTICE([PNG output: $have_libpng])
 AC_MSG_NOTICE([GdkPixbuf2 loader: $have_gdkpixbuf2])
 AC_MSG_NOTICE([Examples: $enable_examples])
-AC_MSG_NOTICE([Tests: $enable_tests (tests require that 'visibility' is turned off)])
+AC_MSG_NOTICE([Tests: $enable_tests (tests will cause 'visibility' to be turned off)])
 AC_MSG_NOTICE([---------------------------------------])
 
 AC_CONFIG_FILES([Makefile])

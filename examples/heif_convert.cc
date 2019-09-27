@@ -95,7 +95,8 @@ int main(int argc, char** argv)
 
   std::unique_ptr<Encoder> encoder;
   if (output_filename.size() > 4 &&
-      output_filename.find(".jpg") == output_filename.size() - 4) {
+      (output_filename.find(".jpg") == output_filename.size() - 4 ||
+       output_filename.find(".jpeg") == output_filename.size() - 5)) {
 #if HAVE_LIBJPEG
     static const int kDefaultJpegQuality = 90;
     if (quality == -1) {
@@ -253,7 +254,7 @@ int main(int argc, char** argv)
           return 1;
         }
 
-        int bit_depth = 10; // TODO
+        int bit_depth = heif_image_handle_get_luma_bits_per_pixel(depth_handle);
 
         struct heif_image* depth_image;
         err = heif_decode_image(depth_handle,
