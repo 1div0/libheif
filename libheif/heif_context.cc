@@ -684,8 +684,8 @@ Error HeifContext::interpret_heif_file()
 
         // --- check whether the image size is "too large"
 
-        if (width  >= m_maximum_image_width_limit ||
-            height >= m_maximum_image_height_limit) {
+        if (width  > m_maximum_image_width_limit ||
+            height > m_maximum_image_height_limit) {
           std::stringstream sstr;
           sstr << "Image size " << width << "x" << height << " exceeds the maximum image size "
                << m_maximum_image_width_limit << "x" << m_maximum_image_height_limit << "\n";
@@ -1676,6 +1676,9 @@ Error HeifContext::Image::encode_image_as_hevc(std::shared_ptr<HeifPixelImage> i
       chroma != image->get_chroma_format()) {
     // @TODO: use color profile when converting
     image = convert_colorspace(image, colorspace, chroma);
+    if (!image) {
+      return Error(heif_error_Unsupported_feature, heif_suberror_Unsupported_color_conversion);
+    }
   }
 
 
