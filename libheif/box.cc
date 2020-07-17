@@ -46,6 +46,9 @@ Fraction::Fraction(int32_t num,int32_t den)
   // We need this as adding fractions may lead to very large denominators
   // (e.g. 0x10000 * 0x10000 > 0x100000000 -> overflow, leading to integer 0)
 
+  numerator = num;
+  denominator = den;
+
   while (denominator > MAX_FRACTION_VALUE || denominator < -MAX_FRACTION_VALUE) {
     numerator /= 2;
     denominator /= 2;
@@ -77,6 +80,11 @@ Fraction Fraction::operator-(const Fraction& b) const
     return Fraction { numerator * b.denominator - b.numerator * denominator,
         denominator * b.denominator };
   }
+}
+
+Fraction Fraction::operator+(int v) const
+{
+  return Fraction { numerator + v * denominator, denominator };
 }
 
 Fraction Fraction::operator-(int v) const
@@ -452,6 +460,10 @@ Error Box::read(BitstreamRange& range, std::shared_ptr<heif::Box>* result)
     box = std::make_shared<Box_hvcC>(hdr);
     break;
 
+  case fourcc("av1C"):
+    box = std::make_shared<Box_av1C>(hdr);
+    break;
+
   case fourcc("idat"):
     box = std::make_shared<Box_idat>(hdr);
     break;
@@ -514,7 +526,7 @@ Error Box::read(BitstreamRange& range, std::shared_ptr<heif::Box>* result)
 
   // Security check: make sure that box size does not exceed int64 size.
 
-  if (hdr.get_box_size() > std::numeric_limits<int64_t>::max()) {
+  if (hdr.get_box_size() > (uint64_t)std::numeric_limits<int64_t>::max()) {
     return Error(heif_error_Invalid_input,
                  heif_suberror_Invalid_box_size);
   }
@@ -2207,13 +2219,12 @@ int Box_clap::left_rounded(int image_width) const
   Fraction pcX  = m_horizontal_offset + Fraction(image_width-1, 2);
   Fraction left = pcX - (m_clean_aperture_width-1)/2;
 
-  return left.round();
+  return left.round_down();
 }
 
 int Box_clap::right_rounded(int image_width) const
 {
-  Fraction pcX  = m_horizontal_offset + Fraction(image_width-1, 2);
-  Fraction right = pcX + (m_clean_aperture_width-1)/2;
+  Fraction right = m_clean_aperture_width-1 + left_rounded(image_width);
 
   return right.round();
 }
@@ -2228,8 +2239,7 @@ int Box_clap::top_rounded(int image_height) const
 
 int Box_clap::bottom_rounded(int image_height) const
 {
-  Fraction pcY  = m_vertical_offset + Fraction(image_height-1, 2);
-  Fraction bottom = pcY + (m_clean_aperture_height-1)/2;
+  Fraction bottom = m_clean_aperture_height-1 + top_rounded(image_height);
 
   return bottom.round();
 }
@@ -2679,6 +2689,113 @@ Error Box_hvcC::write(StreamWriter& writer) const
 }
 
 
+Error Box_av1C::parse(BitstreamRange& range)
+{
+  //parse_full_box_header(range);
+
+  uint8_t byte;
+
+  auto& c = m_configuration; // abbreviation
+
+  byte = range.read8();
+  if ((byte & 0x80) == 0) {
+    // error: marker bit not set
+  }
+
+  c.version = byte & 0x7F;
+
+  byte = range.read8();
+  c.seq_profile = (byte>>5) & 0x7;
+  c.seq_level_idx_0 = byte & 0x1f;
+
+  byte = range.read8();
+  c.seq_tier_0 = (byte >> 7) & 1;
+  c.high_bitdepth = (byte >> 6) & 1;
+  c.twelve_bit = (byte >> 5) & 1;
+  c.monochrome = (byte >> 4) & 1;
+  c.chroma_subsampling_x = (byte >> 3) & 1;
+  c.chroma_subsampling_y = (byte >> 2) & 1;
+  c.chroma_sample_position = byte & 3;
+
+  byte = range.read8();
+  c.initial_presentation_delay_present = (byte >> 4) & 1;
+  if (c.initial_presentation_delay_present) {
+    c.initial_presentation_delay_minus_one = byte & 0x0F;
+  }
+
+  const int64_t configOBUs_bytes = range.get_remaining_bytes();
+  m_config_OBUs.resize(configOBUs_bytes);
+
+  if (!range.read(m_config_OBUs.data(), configOBUs_bytes)) {
+    // error
+  }
+
+  return range.get_error();
+}
+
+
+Error Box_av1C::write(StreamWriter& writer) const
+{
+  size_t box_start = reserve_box_header_space(writer);
+
+  const auto& c = m_configuration; // abbreviation
+
+  writer.write8(c.version | 0x80);
+
+  writer.write8((uint8_t)(((c.seq_profile & 0x7) << 5) |
+                          (c.seq_level_idx_0 & 0x1f)));
+
+  writer.write8((uint8_t)((c.seq_tier_0 ? 0x80 : 0) |
+                          (c.high_bitdepth ? 0x40 : 0) |
+                          (c.twelve_bit ? 0x20 : 0) |
+                          (c.monochrome ? 0x10 : 0) |
+                          (c.chroma_subsampling_x ? 0x08 : 0) |
+                          (c.chroma_subsampling_y ? 0x04 : 0) |
+                          (c.chroma_sample_position & 0x03)));
+
+  writer.write8(0); // TODO initial_presentation_delay
+
+  prepend_header(writer, box_start);
+
+  return Error::Ok;
+}
+
+
+std::string Box_av1C::dump(Indent& indent) const
+{
+  std::ostringstream sstr;
+  sstr << Box::dump(indent);
+
+  const auto& c = m_configuration; // abbreviation
+
+  sstr << indent << "version: " << ((int)c.version) << "\n"
+       << indent << "seq_profile: " << ((int)c.seq_profile) << "\n"
+       << indent << "seq_level_idx_0: " << ((int)c.seq_level_idx_0) << "\n"
+       << indent << "high_bitdepth: " << ((int)c.high_bitdepth) << "\n"
+       << indent << "twelve_bit: " << ((int)c.twelve_bit) << "\n"
+       << indent << "chroma_subsampling_x: " << ((int)c.chroma_subsampling_x) << "\n"
+       << indent << "chroma_subsampling_y: " << ((int)c.chroma_subsampling_y) << "\n"
+       << indent << "chroma_sample_position: " << ((int)c.chroma_sample_position) << "\n"
+       << indent << "initial_presentation_delay: ";
+
+  if (c.initial_presentation_delay_present) {
+    sstr << c.initial_presentation_delay_minus_one+1 << "\n";
+  }
+  else {
+    sstr << "not present\n";
+  }
+
+  sstr << indent << "config OBUs:";
+  for (size_t i=0;i<m_config_OBUs.size();i++) {
+    sstr << " " << std::hex << std::setfill('0') << std::setw(2)
+         << ((int)m_config_OBUs[i]);
+  }
+  sstr << std::dec << "\n";
+
+  return sstr.str();
+}
+
+
 Error Box_idat::parse(BitstreamRange& range)
 {
   //parse_full_box_header(range);
@@ -2742,13 +2859,14 @@ Error Box_idat::read_data(std::shared_ptr<StreamReader> istr,
   assert(success);
   (void)success;
 
-  // reserve space for the data in the output array
+  if (length > 0) {
+    // reserve space for the data in the output array
+    out_data.resize(static_cast<size_t>(curr_size + length));
+    uint8_t* data = &out_data[curr_size];
 
-  out_data.resize(static_cast<size_t>(curr_size + length));
-  uint8_t* data = &out_data[curr_size];
-
-  success = istr->read((char*)data, static_cast<size_t>(length));
-  assert(success);
+    success = istr->read((char*)data, static_cast<size_t>(length));
+    assert(success);
+  }
 
   return Error::Ok;
 }

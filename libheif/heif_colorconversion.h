@@ -32,6 +32,7 @@ struct ColorState
   heif_chroma chroma = heif_chroma_undefined;
   bool has_alpha = false;
   int  bits_per_pixel = 8;
+  std::shared_ptr<const color_profile_nclx> nclx_profile;
 
   ColorState() = default;
   ColorState(heif_colorspace colorspace, heif_chroma chroma, bool has_alpha, int  bits_per_pixel)
@@ -126,4 +127,9 @@ class ColorConversionPipeline
   ColorConversionOptions m_options;
 };
 
+
+ std::shared_ptr<HeifPixelImage> convert_colorspace(const std::shared_ptr<HeifPixelImage>& input,
+                                                    heif_colorspace colorspace,
+                                                    heif_chroma chroma,
+                                                    int output_bpp = 0);
 }

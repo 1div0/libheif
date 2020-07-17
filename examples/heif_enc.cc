@@ -76,6 +76,7 @@ static struct option long_options[] = {
   {"no-alpha",   no_argument, &master_alpha, 0 },
   {"no-thumb-alpha",   no_argument, &thumb_alpha, 0 },
   {"bit-depth",  required_argument, 0, 'b' },
+  {"avif",       no_argument,       0, 'A' },
   {0,         0,                 0,  0 }
 };
 
@@ -85,7 +86,7 @@ void show_help(const char* argv0)
             << "----------------------------------------\n"
             << "Usage: heif-enc [options] image.jpeg ...\n"
             << "\n"
-            << "When specifying multiple source images, they will all be saved into the same HEIF file.\n"
+            << "When specifying multiple source images, they will all be saved into the same HEIF/AVIF file.\n"
             << "\n"
             << "When using the x265 encoder, you may pass it any of its parameters by\n"
             << "prefixing the parameter name with 'x265:'. Hence, to set the 'ctu' parameter,\n"
@@ -102,8 +103,10 @@ void show_help(const char* argv0)
             << "  -o, --output    output filename (optional)\n"
             << "  -v, --verbose   enable logging output (more -v will increase logging level)\n"
             << "  -P, --params    show all encoder parameters\n"
-            << "  -b #            bit-depth of generated HEIF file when using 16-bit PNG input (default: 10 bit)\n"
-            << "  -p              set encoder parameter (NAME=VALUE)\n";
+            << "  -b #            bit-depth of generated HEIF/AVIF file when using 16-bit PNG input (default: 10 bit)\n"
+            << "  -p              set encoder parameter (NAME=VALUE)\n"
+            << "  -A, --avif      encode as AVIF\n"
+    ;
 }
 
 
@@ -545,7 +548,7 @@ std::shared_ptr<heif_image> loadPNG(const char* filename, int output_bit_depth)
   // OK, now we should have the png image in some way in
   // row_pointers, have fun with it
 
-  int band;
+  int band = 0;
   switch (color_type) {
   case PNG_COLOR_TYPE_GRAY:
   case PNG_COLOR_TYPE_GRAY_ALPHA:
@@ -649,8 +652,8 @@ std::shared_ptr<heif_image> loadPNG(const char* filename, int output_bit_depth)
 
       for (uint32_t x = 0; x < nVal ; x++) {
         uint16_t v = (uint16_t)(((p[0]<<8) | p[1]) >> bdShift);
-        p_out[2*x + y*stride + 0] = (v>>8);
-        p_out[2*x + y*stride + 1] = (v & 0xFF);
+        p_out[2*x + y*stride + 0] = (uint8_t)(v >> 8);
+        p_out[2*x + y*stride + 1] = (uint8_t)(v & 0xFF);
         p += 2;
       }
     }
@@ -896,13 +899,14 @@ int main(int argc, char** argv)
   bool option_show_parameters = false;
   int thumbnail_bbox_size = 0;
   int output_bit_depth = 10;
+  bool enc_av1f = false;
 
   std::vector<std::string> raw_params;
 
 
   while (true) {
     int option_index = 0;
-    int c = getopt_long(argc, argv, "hq:Lo:vPp:t:b:", long_options, &option_index);
+    int c = getopt_long(argc, argv, "hq:Lo:vPp:t:b:A", long_options, &option_index);
     if (c == -1)
       break;
 
@@ -933,6 +937,8 @@ int main(int argc, char** argv)
       break;
     case 'b':
       output_bit_depth = atoi(optarg);
+    case 'A':
+      enc_av1f = true;
       break;
     }
   }
@@ -957,7 +963,7 @@ int main(int argc, char** argv)
   std::shared_ptr<heif_context> context(heif_context_alloc(),
                                         [] (heif_context* c) { heif_context_free(c); });
   if (!context) {
-    std::cerr << "Could not create HEIF context\n";
+    std::cerr << "Could not create context object\n";
     return 1;
   }
 
@@ -966,7 +972,9 @@ int main(int argc, char** argv)
 
 #define MAX_ENCODERS 5
   const heif_encoder_descriptor* encoder_descriptors[MAX_ENCODERS];
-  int count = heif_context_get_encoder_descriptors(context.get(), heif_compression_HEVC, nullptr,
+  int count = heif_context_get_encoder_descriptors(context.get(),
+                                                   enc_av1f ? heif_compression_AV1 : heif_compression_HEVC,
+                                                   nullptr,
                                                    encoder_descriptors, MAX_ENCODERS);
 
   if (count>0) {
@@ -1077,10 +1085,9 @@ int main(int argc, char** argv)
                                       &handle);
     if (error.code != 0) {
       heif_encoding_options_free(options);
-      std::cerr << "Could not encode HEIF file: " << error.message << "\n";
+      std::cerr << "Could not encode HEIF/AVIF file: " << error.message << "\n";
       return 1;
     }
-
 
     if (thumbnail_bbox_size > 0)
       {

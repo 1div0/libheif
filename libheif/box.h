@@ -25,12 +25,9 @@
 #include "config.h"
 #endif
 
-#if defined(HAVE_INTTYPES_H)
-#include <inttypes.h>
-#endif
-#if defined(HAVE_STDDEF_H)
-#include <stddef.h>
-#endif
+#include <cinttypes>
+#include <cstddef>
+
 #include <vector>
 #include <string>
 #include <memory>
@@ -70,6 +67,7 @@ namespace heif {
 
     Fraction operator+(const Fraction&) const;
     Fraction operator-(const Fraction&) const;
+    Fraction operator+(int) const;
     Fraction operator-(int) const;
     Fraction operator/(int) const;
 
@@ -82,6 +80,12 @@ namespace heif {
     int32_t numerator = 0;
     int32_t denominator = 1;
   };
+
+
+  inline std::ostream& operator<<(std::ostream& str, const Fraction& f) {
+    str << f.numerator << "/" << f.denominator;
+    return str;
+  }
 
 
   class BoxHeader {
@@ -686,6 +690,58 @@ namespace heif {
   };
 
 
+  class Box_av1C : public Box {
+  public:
+    Box_av1C() { set_short_type(fourcc("av1C")); set_is_full_box(false); }
+  Box_av1C(const BoxHeader& hdr) : Box(hdr) { }
+
+    struct configuration {
+      //unsigned int (1) marker = 1;
+      uint8_t version = 1;
+      uint8_t seq_profile = 0;
+      uint8_t seq_level_idx_0 = 0;
+      uint8_t seq_tier_0 = 0;
+      uint8_t high_bitdepth = 0;
+      uint8_t twelve_bit = 0;
+      uint8_t monochrome = 0;
+      uint8_t chroma_subsampling_x = 0;
+      uint8_t chroma_subsampling_y = 0;
+      uint8_t chroma_sample_position = 0;
+      //uint8_t reserved = 0;
+
+      uint8_t initial_presentation_delay_present = 0;
+      uint8_t initial_presentation_delay_minus_one = 0;
+
+      //unsigned int (8)[] configOBUs;
+    };
+
+
+    std::string dump(Indent&) const override;
+
+    bool get_headers(std::vector<uint8_t>* dest) const {
+      *dest = m_config_OBUs;
+      return true;
+    }
+
+    void set_configuration(const configuration& config) { m_configuration=config; }
+
+    configuration get_configuration() const { return m_configuration; }
+
+    //void append_nal_data(const std::vector<uint8_t>& nal);
+    //void append_nal_data(const uint8_t* data, size_t size);
+
+    Error write(StreamWriter& writer) const override;
+
+  protected:
+    Error parse(BitstreamRange& range) override;
+
+  private:
+    configuration m_configuration;
+
+    std::vector<uint8_t> m_config_OBUs;
+  };
+
+
   class Box_idat : public Box {
   public:
   Box_idat(const BoxHeader& hdr) : Box(hdr) { }
@@ -761,6 +817,10 @@ namespace heif {
   public:
     Box_pixi() { set_short_type(fourcc("pixi")); set_is_full_box(true); }
   Box_pixi(const BoxHeader& hdr) : Box(hdr) { }
+
+    int get_num_channels() const { return (int)m_bits_per_channel.size(); }
+
+    int get_bits_per_channel(int channel) const { return m_bits_per_channel[channel]; }
 
     std::string dump(Indent&) const override;
 

@@ -37,6 +37,12 @@ namespace heif {
   int chroma_h_subsampling(heif_chroma c);
   int chroma_v_subsampling(heif_chroma c);
 
+  heif_chroma chroma_from_subsampling(int h,int v);
+
+  bool is_chroma_with_alpha(heif_chroma chroma);
+  int num_interleaved_pixels_per_plane(heif_chroma chroma);
+
+
 class HeifPixelImage : public std::enable_shared_from_this<HeifPixelImage>,
                        public ErrorBuffer
 {
@@ -99,7 +105,9 @@ class HeifPixelImage : public std::enable_shared_from_this<HeifPixelImage>,
 
   void set_color_profile(std::shared_ptr<const color_profile> profile) { m_color_profile = profile; }
 
-  std::shared_ptr<const color_profile> get_color_profile() { return m_color_profile; }
+  std::shared_ptr<const color_profile> get_color_profile() const { return m_color_profile; }
+
+  void debug_dump() const;
 
  private:
   struct ImagePlane {
@@ -121,10 +129,6 @@ class HeifPixelImage : public std::enable_shared_from_this<HeifPixelImage>,
   std::map<heif_channel, ImagePlane> m_planes;
 };
 
-
- std::shared_ptr<HeifPixelImage> convert_colorspace(const std::shared_ptr<HeifPixelImage>& input,
-                                                    heif_colorspace colorspace,
-                                                    heif_chroma chroma);
 }
 
 #endif

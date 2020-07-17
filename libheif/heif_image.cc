@@ -68,6 +68,24 @@ int heif::chroma_v_subsampling(heif_chroma c)
   }
 }
 
+heif_chroma heif::chroma_from_subsampling(int h,int v)
+{
+  if (h==2 && v==2) {
+    return heif_chroma_420;
+  }
+  else if (h==2 && v==1) {
+    return heif_chroma_422;
+  }
+  else if (h==1 && v==1) {
+    return heif_chroma_444;
+  }
+  else {
+    assert(false);
+    return heif_chroma_undefined;
+  }
+}
+
+
 
 HeifPixelImage::HeifPixelImage()
 {
@@ -80,7 +98,8 @@ HeifPixelImage::~HeifPixelImage()
   }
 }
 
-static int num_interleaved_pixels_per_plane(heif_chroma chroma) {
+
+int heif::num_interleaved_pixels_per_plane(heif_chroma chroma) {
   switch (chroma) {
   case heif_chroma_undefined:
   case heif_chroma_monochrome:
@@ -144,7 +163,6 @@ bool HeifPixelImage::add_plane(heif_channel channel, int width, int height, int 
   int bytes_per_pixel = num_interleaved_pixels_per_plane(m_chroma) * bytes_per_component;
 
   plane.stride = width * bytes_per_pixel;
-
   plane.stride = (plane.stride+alignment-1) & ~(alignment-1);
 
   try {
@@ -336,7 +354,7 @@ void HeifPixelImage::transfer_plane_from_image_as(std::shared_ptr<HeifPixelImage
 }
 
 
-static bool is_chroma_with_alpha(heif_chroma chroma) {
+bool heif::is_chroma_with_alpha(heif_chroma chroma) {
   switch (chroma) {
   case heif_chroma_undefined:
   case heif_chroma_monochrome:
@@ -356,44 +374,6 @@ static bool is_chroma_with_alpha(heif_chroma chroma) {
 
   assert(false);
   return false;
-}
-
-
-std::shared_ptr<HeifPixelImage> heif::convert_colorspace(const std::shared_ptr<HeifPixelImage>& input,
-                                                         heif_colorspace target_colorspace,
-                                                         heif_chroma target_chroma)
-{
-  ColorState input_state;
-  input_state.colorspace = input->get_colorspace();
-  input_state.chroma = input->get_chroma_format();
-  input_state.has_alpha = input->has_channel(heif_channel_Alpha) || is_chroma_with_alpha(input->get_chroma_format());
-
-  std::set<enum heif_channel> channels = input->get_channel_set();
-  assert(!channels.empty());
-  input_state.bits_per_pixel = input->get_bits_per_pixel(*(channels.begin()));
-
-  ColorState output_state = input_state;
-  output_state.colorspace = target_colorspace;
-  output_state.chroma = target_chroma;
-
-  // If we convert to an interleaved format, we want alpha only if present in the
-  // interleaved output format.
-  // For planar formats, we include an alpha plane when included in the input.
-
-  if (num_interleaved_pixels_per_plane(target_chroma)>1) {
-    output_state.has_alpha = is_chroma_with_alpha(target_chroma);
-  }
-  else {
-    output_state.has_alpha = input_state.has_alpha;
-  }
-
-  ColorConversionPipeline pipeline;
-  bool success = pipeline.construct_pipeline(input_state, output_state);
-  if (!success) {
-    return nullptr;
-  }
-
-  return pipeline.convert_image(input);
 }
 
 
@@ -424,12 +404,13 @@ Error HeifPixelImage::rotate_ccw(int angle_degrees,
     heif_channel channel = plane_pair.first;
     const ImagePlane& plane = plane_pair.second;
 
+    /*
     if (plane.bit_depth != 8) {
       return Error(heif_error_Unsupported_feature,
                    heif_suberror_Unspecified,
                    "Can currently only rotate images with 8 bits per pixel");
     }
-
+    */
 
     int out_plane_width = plane.width;
     int out_plane_height = plane.height;
@@ -474,22 +455,22 @@ Error HeifPixelImage::rotate_ccw(int angle_degrees,
       if (angle_degrees==270) {
         for (int x=0;x<h;x++)
           for (int y=0;y<w;y++) {
-            out_data[y*out_stride + x] = in_data[(h-1-x)*in_stride + y];
-            out_data[y*out_stride + x+1] = in_data[(h-1-x)*in_stride + y+1];
+            out_data[y*out_stride + 2*x] = in_data[(h-1-x)*in_stride + 2*y];
+            out_data[y*out_stride + 2*x+1] = in_data[(h-1-x)*in_stride + 2*y+1];
           }
       }
       else if (angle_degrees==180) {
         for (int y=0;y<h;y++)
           for (int x=0;x<w;x++) {
-            out_data[y*out_stride + x] = in_data[(h-1-y)*in_stride + (w-1-x)];
-            out_data[y*out_stride + x+1] = in_data[(h-1-y)*in_stride + (w-1-x)+1];
+            out_data[y*out_stride + 2*x] = in_data[(h-1-y)*in_stride + 2*(w-1-x)];
+            out_data[y*out_stride + 2*x+1] = in_data[(h-1-y)*in_stride + 2*(w-1-x)+1];
           }
       }
       else if (angle_degrees==90) {
         for (int x=0;x<h;x++)
           for (int y=0;y<w;y++) {
-            out_data[y*out_stride + x] = in_data[x*in_stride + (w-1-y)];
-            out_data[y*out_stride + x+1] = in_data[x*in_stride + (w-1-y)+1];
+            out_data[y*out_stride + 2*x]   = in_data[x*in_stride + 2*(w-1-y)];
+            out_data[y*out_stride + 2*x+1] = in_data[x*in_stride + 2*(w-1-y)+1];
           }
       }
     }
@@ -809,4 +790,21 @@ Error HeifPixelImage::scale_nearest_neighbor(std::shared_ptr<HeifPixelImage>& ou
   }
 
   return Error::Ok;
+}
+
+
+void HeifPixelImage::debug_dump() const
+{
+  auto channels = get_channel_set();
+  for (auto c : channels) {
+    int stride = 0;
+    const uint8_t* p = get_plane(c, &stride);
+
+    for (int y=0;y<8;y++) {
+      for (int x=0;x<8;x++) {
+        printf("%02x ", p[y*stride+x]);
+      }
+      printf("\n");
+    }
+  }
 }
