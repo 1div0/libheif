@@ -29,7 +29,6 @@
 #include "heif_plugin_registry.h"
 #include "error.h"
 #include "bitstream.h"
-#include "nclx.h"
 
 #if defined(__EMSCRIPTEN__)
 #include "heif_emscripten.h"
@@ -42,53 +41,62 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include <string.h>
-#if defined(HAVE_UNISTD_H)
-#include <unistd.h>
-#endif
+#include <cstring>
 
-#if defined(_MSC_VER)
+#if (defined(__MINGW32__) || defined(__MINGW64__) || defined(_MSC_VER)) && !defined(HAVE_UNISTD_H)
 // for _write
 #include <io.h>
+#else
+
+#include <unistd.h>
+
 #endif
 
 using namespace heif;
 
-static struct heif_error error_Ok = { heif_error_Ok, heif_suberror_Unspecified, kSuccess };
-static struct heif_error error_unsupported_parameter = { heif_error_Usage_error,
-                                                         heif_suberror_Unsupported_parameter,
-                                                         "Unsupported encoder parameter" };
-static struct heif_error error_unsupported_plugin_version = { heif_error_Usage_error,
-                                                              heif_suberror_Unsupported_plugin_version,
-                                                              "Unsupported plugin version" };
-static struct heif_error error_null_parameter = { heif_error_Usage_error,
-                                                  heif_suberror_Null_pointer_argument,
-                                                  "NULL passed" };
+static struct heif_error error_Ok = {heif_error_Ok, heif_suberror_Unspecified, kSuccess};
+static struct heif_error error_unsupported_parameter = {heif_error_Usage_error,
+                                                        heif_suberror_Unsupported_parameter,
+                                                        "Unsupported encoder parameter"};
+static struct heif_error error_invalid_parameter_value = {heif_error_Usage_error,
+                                                          heif_suberror_Invalid_parameter_value,
+                                                          "Invalid parameter value"};
+static struct heif_error error_unsupported_plugin_version = {heif_error_Usage_error,
+                                                             heif_suberror_Unsupported_plugin_version,
+                                                             "Unsupported plugin version"};
+static struct heif_error error_null_parameter = {heif_error_Usage_error,
+                                                 heif_suberror_Null_pointer_argument,
+                                                 "NULL passed"};
 
-const char *heif_get_version(void) {
+const char* heif_get_version(void)
+{
   return (LIBHEIF_VERSION);
 }
 
-uint32_t heif_get_version_number(void) {
+uint32_t heif_get_version_number(void)
+{
   return (LIBHEIF_NUMERIC_VERSION);
 }
 
-int heif_get_version_number_major(void) {
-  return ((LIBHEIF_NUMERIC_VERSION)>>24) & 0xFF;
+int heif_get_version_number_major(void)
+{
+  return ((LIBHEIF_NUMERIC_VERSION) >> 24) & 0xFF;
 }
 
-int heif_get_version_number_minor(void) {
-  return ((LIBHEIF_NUMERIC_VERSION)>>16) & 0xFF;
+int heif_get_version_number_minor(void)
+{
+  return ((LIBHEIF_NUMERIC_VERSION) >> 16) & 0xFF;
 }
 
-int heif_get_version_number_maintenance(void) {
-  return ((LIBHEIF_NUMERIC_VERSION)>>8) & 0xFF;
+int heif_get_version_number_maintenance(void)
+{
+  return ((LIBHEIF_NUMERIC_VERSION) >> 8) & 0xFF;
 }
 
 
 heif_filetype_result heif_check_filetype(const uint8_t* data, int len)
 {
-  if (len<8) {
+  if (len < 8) {
     return heif_filetype_maybe;
   }
 
@@ -99,7 +107,7 @@ heif_filetype_result heif_check_filetype(const uint8_t* data, int len)
     return heif_filetype_no;
   }
 
-  if (len>=12) {
+  if (len >= 12) {
     heif_brand brand = heif_main_brand(data, len);
 
     if (brand == heif_heic) {
@@ -128,51 +136,51 @@ heif_filetype_result heif_check_filetype(const uint8_t* data, int len)
 
 heif_brand heif_main_brand(const uint8_t* data, int len)
 {
-  if (len<12) {
+  if (len < 12) {
     return heif_unknown_brand;
   }
 
   char brand[5];
-  brand[0]=data[8];
-  brand[1]=data[9];
-  brand[2]=data[10];
-  brand[3]=data[11];
-  brand[4]=0;
+  brand[0] = data[8];
+  brand[1] = data[9];
+  brand[2] = data[10];
+  brand[3] = data[11];
+  brand[4] = 0;
 
-  if (strcmp(brand, "heic")==0) {
+  if (strcmp(brand, "heic") == 0) {
     return heif_heic;
   }
-  else if (strcmp(brand, "heix")==0) {
+  else if (strcmp(brand, "heix") == 0) {
     return heif_heix;
   }
-  else if (strcmp(brand, "hevc")==0) {
+  else if (strcmp(brand, "hevc") == 0) {
     return heif_hevc;
   }
-  else if (strcmp(brand, "hevx")==0) {
+  else if (strcmp(brand, "hevx") == 0) {
     return heif_hevx;
   }
-  else if (strcmp(brand, "heim")==0) {
+  else if (strcmp(brand, "heim") == 0) {
     return heif_heim;
   }
-  else if (strcmp(brand, "heis")==0) {
+  else if (strcmp(brand, "heis") == 0) {
     return heif_heis;
   }
-  else if (strcmp(brand, "hevm")==0) {
+  else if (strcmp(brand, "hevm") == 0) {
     return heif_hevm;
   }
-  else if (strcmp(brand, "hevs")==0) {
+  else if (strcmp(brand, "hevs") == 0) {
     return heif_hevs;
   }
-  else if (strcmp(brand, "mif1")==0) {
+  else if (strcmp(brand, "mif1") == 0) {
     return heif_mif1;
   }
-  else if (strcmp(brand, "msf1")==0) {
+  else if (strcmp(brand, "msf1") == 0) {
     return heif_msf1;
   }
-  else if (strcmp(brand, "avif")==0) {
+  else if (strcmp(brand, "avif") == 0) {
     return heif_avif;
   }
-  else if (strcmp(brand, "avis")==0) {
+  else if (strcmp(brand, "avis") == 0) {
     return heif_avis;
   }
   else {
@@ -181,11 +189,13 @@ heif_brand heif_main_brand(const uint8_t* data, int len)
 }
 
 
-enum class TriBool {
+enum class TriBool
+{
   No, Yes, Unknown
 };
 
-TriBool is_jpeg(const uint8_t* data, int len) {
+TriBool is_jpeg(const uint8_t* data, int len)
+{
   if (len < 12) {
     return TriBool::Unknown;
   }
@@ -206,13 +216,14 @@ TriBool is_jpeg(const uint8_t* data, int len) {
 }
 
 
-TriBool is_png(const uint8_t* data, int len) {
+TriBool is_png(const uint8_t* data, int len)
+{
   if (len < 8) {
     return TriBool::Unknown;
   }
 
-  if (data[0] == 0x89 && data[1]==0x50 && data[2]==0x4E && data[3]==0x47 &&
-      data[4] == 0x0D && data[5]==0x0A && data[6]==0x1A && data[7]==0x0A) {
+  if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 &&
+      data[4] == 0x0D && data[5] == 0x0A && data[6] == 0x1A && data[7] == 0x0A) {
     return TriBool::Yes;
   }
   else {
@@ -223,7 +234,7 @@ TriBool is_png(const uint8_t* data, int len) {
 
 const char* heif_get_file_mime_type(const uint8_t* data, int len)
 {
-  heif_brand mainBrand = heif_main_brand(data,len);
+  heif_brand mainBrand = heif_main_brand(data, len);
 
   if (mainBrand == heif_heic ||
       mainBrand == heif_heix ||
@@ -249,10 +260,10 @@ const char* heif_get_file_mime_type(const uint8_t* data, int len)
   else if (mainBrand == heif_avis) {
     return "image/avif-sequence";
   }
-  else if (is_jpeg(data,len)==TriBool::Yes) {
+  else if (is_jpeg(data, len) == TriBool::Yes) {
     return "image/jpeg";
   }
-  else if (is_png(data,len)==TriBool::Yes) {
+  else if (is_png(data, len) == TriBool::Yes) {
     return "image/png";
   }
   else {
@@ -308,14 +319,15 @@ heif_error heif_context_read_from_reader(struct heif_context* ctx,
 
 // TODO: heif_error heif_context_read_from_file_descriptor(heif_context*, int fd);
 
-void heif_context_debug_dump_boxes_to_file(struct heif_context* ctx, int fd) {
+void heif_context_debug_dump_boxes_to_file(struct heif_context* ctx, int fd)
+{
   if (!ctx) {
     return;
   }
 
   std::string dump = ctx->context->debug_dump_boxes();
   // TODO(fancycode): Should we return an error if writing fails?
-#if defined(_MSC_VER)
+#if (defined(__MINGW32__) || defined(__MINGW64__) || defined(_MSC_VER)) && !defined(HAVE_UNISTD_H)
   auto written = _write(fd, dump.c_str(), dump.size());
 #else
   auto written = write(fd, dump.c_str(), dump.size());
@@ -384,7 +396,7 @@ int heif_context_is_top_level_image_ID(struct heif_context* ctx, heif_item_id id
 
 int heif_context_get_number_of_top_level_images(heif_context* ctx)
 {
-  return (int)ctx->context->get_top_level_images().size();
+  return (int) ctx->context->get_top_level_images().size();
 }
 
 
@@ -392,7 +404,7 @@ int heif_context_get_list_of_top_level_image_IDs(struct heif_context* ctx,
                                                  heif_item_id* ID_array,
                                                  int count)
 {
-  if (ID_array == nullptr || count==0 || ctx==nullptr) {
+  if (ID_array == nullptr || count == 0 || ctx == nullptr) {
     return 0;
   }
 
@@ -400,8 +412,8 @@ int heif_context_get_list_of_top_level_image_IDs(struct heif_context* ctx,
   // fill in ID values into output array
 
   const std::vector<std::shared_ptr<HeifContext::Image>> imgs = ctx->context->get_top_level_images();
-  int n = (int)std::min(count,(int)imgs.size());
-  for (int i=0;i<n;i++) {
+  int n = (int) std::min(count, (int) imgs.size());
+  for (int i = 0; i < n; i++) {
     ID_array[i] = imgs[i]->get_id();
   }
 
@@ -450,21 +462,21 @@ int heif_image_handle_is_primary_image(const struct heif_image_handle* handle)
 
 int heif_image_handle_get_number_of_thumbnails(const struct heif_image_handle* handle)
 {
-  return (int)handle->image->get_thumbnails().size();
+  return (int) handle->image->get_thumbnails().size();
 }
 
 
 int heif_image_handle_get_list_of_thumbnail_IDs(const struct heif_image_handle* handle,
                                                 heif_item_id* ids, int count)
 {
-  if (ids==nullptr) {
+  if (ids == nullptr) {
     return 0;
   }
 
   auto thumbnails = handle->image->get_thumbnails();
-  int n = (int)std::min(count, (int)thumbnails.size());
+  int n = (int) std::min(count, (int) thumbnails.size());
 
-  for (int i=0;i<n;i++) {
+  for (int i = 0; i < n; i++) {
     ids[i] = thumbnails[i]->get_id();
   }
 
@@ -607,7 +619,7 @@ int heif_image_handle_get_list_of_depth_image_IDs(const struct heif_image_handle
 {
   auto depth_image = handle->image->get_depth_channel();
 
-  if (count==0) {
+  if (count == 0) {
     return 0;
   }
 
@@ -706,7 +718,7 @@ struct heif_error heif_image_create(int width, int height,
 
   *image = img;
 
-  struct heif_error err = { heif_error_Ok, heif_suberror_Unspecified, Error::kSuccess };
+  struct heif_error err = {heif_error_Ok, heif_suberror_Unspecified, Error::kSuccess};
   return err;
 }
 
@@ -732,24 +744,76 @@ enum heif_chroma heif_image_get_chroma_format(const struct heif_image* img)
 }
 
 
-int heif_image_get_width(const struct heif_image* img,enum heif_channel channel)
+int heif_image_get_width(const struct heif_image* img, enum heif_channel channel)
 {
   return img->image->get_width(channel);
 }
 
-int heif_image_get_height(const struct heif_image* img,enum heif_channel channel)
+
+int heif_image_get_height(const struct heif_image* img, enum heif_channel channel)
 {
   return img->image->get_height(channel);
 }
 
 
-int heif_image_get_bits_per_pixel(const struct heif_image* img,enum heif_channel channel)
+int heif_image_get_primary_width(const struct heif_image* img)
+{
+  if (img->image->get_colorspace() == heif_colorspace_RGB) {
+    if (img->image->get_chroma_format() == heif_chroma_444) {
+      return img->image->get_width(heif_channel_G);
+    }
+    else {
+      return img->image->get_width(heif_channel_interleaved);
+    }
+  }
+  else {
+    return img->image->get_width(heif_channel_Y);
+  }
+}
+
+
+int heif_image_get_primary_height(const struct heif_image* img)
+{
+  if (img->image->get_colorspace() == heif_colorspace_RGB) {
+    if (img->image->get_chroma_format() == heif_chroma_444) {
+      return img->image->get_height(heif_channel_G);
+    }
+    else {
+      return img->image->get_height(heif_channel_interleaved);
+    }
+  }
+  else {
+    return img->image->get_height(heif_channel_Y);
+  }
+}
+
+
+heif_error heif_image_crop(struct heif_image* img,
+                           int left, int right, int top, int bottom)
+{
+  std::shared_ptr<HeifPixelImage> out_img;
+
+  int w = img->image->get_width();
+  int h = img->image->get_height();
+
+  Error err = img->image->crop(left, w - 1 - right, top, h - 1 - bottom, out_img);
+  if (err) {
+    return err.error_struct(img->image.get());
+  }
+
+  img->image = out_img;
+
+  return heif_error{heif_error_Ok, heif_suberror_Unspecified, Error::kSuccess};
+}
+
+
+int heif_image_get_bits_per_pixel(const struct heif_image* img, enum heif_channel channel)
 {
   return img->image->get_storage_bits_per_pixel(channel);
 }
 
 
-int heif_image_get_bits_per_pixel_range(const struct heif_image* img,enum heif_channel channel)
+int heif_image_get_bits_per_pixel_range(const struct heif_image* img, enum heif_channel channel)
 {
   return img->image->get_bits_per_pixel(channel);
 }
@@ -765,17 +829,16 @@ struct heif_error heif_image_add_plane(struct heif_image* image,
                                        heif_channel channel, int width, int height, int bit_depth)
 {
   if (!image->image->add_plane(channel, width, height, bit_depth)) {
-    struct heif_error err = { heif_error_Memory_allocation_error,
-                              heif_suberror_Unspecified,
-                              "Cannot allocate memory for image plane" };
+    struct heif_error err = {heif_error_Memory_allocation_error,
+                             heif_suberror_Unspecified,
+                             "Cannot allocate memory for image plane"};
     return err;
   }
   else {
-    struct heif_error err = { heif_error_Ok, heif_suberror_Unspecified, Error::kSuccess };
+    struct heif_error err = {heif_error_Ok, heif_suberror_Unspecified, Error::kSuccess};
     return err;
   }
 }
-
 
 
 const uint8_t* heif_image_get_plane_readonly(const struct heif_image* image,
@@ -828,9 +891,9 @@ struct heif_error heif_image_set_raw_color_profile(struct heif_image* image,
                                                    const size_t profile_size)
 {
   if (strlen(color_profile_type_fourcc) != 4) {
-    heif_error err = { heif_error_Usage_error,
-                       heif_suberror_Unspecified,
-                       "Invalid color_profile_type (must be 4 characters)" };
+    heif_error err = {heif_error_Usage_error,
+                      heif_suberror_Unspecified,
+                      "Invalid color_profile_type (must be 4 characters)"};
     return err;
   }
 
@@ -838,14 +901,14 @@ struct heif_error heif_image_set_raw_color_profile(struct heif_image* image,
 
   std::vector<uint8_t> data;
   data.insert(data.end(),
-              (const uint8_t*)profile_data,
-              (const uint8_t*)profile_data + profile_size);
+              (const uint8_t*) profile_data,
+              (const uint8_t*) profile_data + profile_size);
 
   auto color_profile = std::make_shared<color_profile_raw>(color_profile_type, data);
 
-  image->image->set_color_profile(color_profile);
+  image->image->set_color_profile_icc(color_profile);
 
-  struct heif_error err = { heif_error_Ok, heif_suberror_Unspecified, Error::kSuccess };
+  struct heif_error err = {heif_error_Ok, heif_suberror_Unspecified, Error::kSuccess};
   return err;
 }
 
@@ -860,7 +923,7 @@ struct heif_error heif_image_set_nclx_color_profile(struct heif_image* image,
   nclx->set_matrix_coefficients(color_profile->matrix_coefficients);
   nclx->set_full_range_flag(color_profile->full_range_flag);
 
-  image->image->set_color_profile(nclx);
+  image->image->set_color_profile_nclx(nclx);
 
   return error_Ok;
 }
@@ -879,9 +942,9 @@ int heif_image_handle_get_number_of_metadata_blocks(const struct heif_image_hand
 {
   auto metadata_list = handle->image->get_metadata();
 
-  int cnt=0;
+  int cnt = 0;
   for (const auto& metadata : metadata_list) {
-    if (type_filter==nullptr ||
+    if (type_filter == nullptr ||
         metadata->item_type == type_filter) {
       cnt++;
     }
@@ -897,9 +960,9 @@ int heif_image_handle_get_list_of_metadata_block_IDs(const struct heif_image_han
 {
   auto metadata_list = handle->image->get_metadata();
 
-  int cnt=0;
+  int cnt = 0;
   for (const auto& metadata : metadata_list) {
-    if (type_filter==nullptr ||
+    if (type_filter == nullptr ||
         metadata->item_type == type_filter) {
       if (cnt < count) {
         ids[cnt] = metadata->item_id;
@@ -964,7 +1027,7 @@ struct heif_error heif_image_handle_get_metadata(const struct heif_image_handle*
                                                  heif_item_id metadata_id,
                                                  void* out_data)
 {
-  if (out_data==nullptr) {
+  if (out_data == nullptr) {
     Error err(heif_error_Usage_error,
               heif_suberror_Null_pointer_argument);
     return err.error_struct(handle->image.get());
@@ -989,62 +1052,31 @@ struct heif_error heif_image_handle_get_metadata(const struct heif_image_handle*
 
 heif_color_profile_type heif_image_handle_get_color_profile_type(const struct heif_image_handle* handle)
 {
-  auto profile = handle->image->get_color_profile();
-  if (!profile) {
-    return heif_color_profile_type_not_present;
+  auto profile_icc = handle->image->get_color_profile_icc();
+  if (profile_icc) {
+    return (heif_color_profile_type) profile_icc->get_type();
+  }
+
+  auto profile_nclx = handle->image->get_color_profile_nclx();
+  if (profile_nclx) {
+    return (heif_color_profile_type) profile_nclx->get_type();
   }
   else {
-    return (heif_color_profile_type)profile->get_type();
+    return heif_color_profile_type_not_present;
   }
 }
 
 size_t heif_image_handle_get_raw_color_profile_size(const struct heif_image_handle* handle)
 {
-  auto profile = handle->image->get_color_profile();
-  auto raw_profile = std::dynamic_pointer_cast<const color_profile_raw>(profile);
-  if (raw_profile) {
-    return raw_profile->get_data().size();
+  auto profile_icc = handle->image->get_color_profile_icc();
+  if (profile_icc) {
+    return profile_icc->get_data().size();
   }
   else {
     return 0;
   }
 }
 
-
-static Error get_nclx_color_profile(std::shared_ptr<const color_profile_nclx> nclx_profile,
-                                    struct heif_color_profile_nclx** out_data)
-{
-  if (nclx_profile) {
-    *out_data = (struct heif_color_profile_nclx*)malloc(sizeof(struct heif_color_profile_nclx));
-
-    struct heif_color_profile_nclx* nclx = *out_data;
-
-    nclx->version = 1;
-    nclx->color_primaries = (enum heif_color_primaries)nclx_profile->get_colour_primaries();
-    nclx->transfer_characteristics = (enum heif_transfer_characteristics)nclx_profile->get_transfer_characteristics();
-    nclx->matrix_coefficients = (enum heif_matrix_coefficients)nclx_profile->get_matrix_coefficients();
-    nclx->full_range_flag = nclx_profile->get_full_range_flag();
-
-    // fill color primaries
-
-    auto primaries = get_colour_primaries(nclx->color_primaries);
-
-    nclx->color_primary_red_x = primaries.redX;
-    nclx->color_primary_red_y = primaries.redY;
-    nclx->color_primary_green_x = primaries.greenX;
-    nclx->color_primary_green_y = primaries.greenY;
-    nclx->color_primary_blue_x = primaries.blueX;
-    nclx->color_primary_blue_y = primaries.blueY;
-    nclx->color_primary_white_x = primaries.whiteX;
-    nclx->color_primary_white_y = primaries.whiteY;
-
-    return Error::Ok;
-  }
-  else {
-    return Error(heif_error_Usage_error,
-                 heif_suberror_Unspecified);
-  }
-}
 
 struct heif_error heif_image_handle_get_nclx_color_profile(const struct heif_image_handle* handle,
                                                            struct heif_color_profile_nclx** out_data)
@@ -1055,9 +1087,14 @@ struct heif_error heif_image_handle_get_nclx_color_profile(const struct heif_ima
     return err.error_struct(handle->image.get());
   }
 
-  auto profile = handle->image->get_color_profile();
-  auto nclx_profile = std::dynamic_pointer_cast<const color_profile_nclx>(profile);
-  Error err = get_nclx_color_profile(nclx_profile, out_data);
+  auto nclx_profile = handle->image->get_color_profile_nclx();
+  if (!nclx_profile) {
+    Error err(heif_error_Color_profile_does_not_exist,
+              heif_suberror_Unspecified);
+    return err.error_struct(handle->image.get());
+  }
+
+  Error err = nclx_profile->get_nclx_color_profile(out_data);
 
   return err.error_struct(handle->image.get());
 }
@@ -1066,41 +1103,49 @@ struct heif_error heif_image_handle_get_nclx_color_profile(const struct heif_ima
 struct heif_error heif_image_handle_get_raw_color_profile(const struct heif_image_handle* handle,
                                                           void* out_data)
 {
-  if (out_data==nullptr) {
+  if (out_data == nullptr) {
     Error err(heif_error_Usage_error,
               heif_suberror_Null_pointer_argument);
     return err.error_struct(handle->image.get());
   }
 
-  auto profile = handle->image->get_color_profile();
-  auto raw_profile = std::dynamic_pointer_cast<const color_profile_raw>(profile);
+  auto raw_profile = handle->image->get_color_profile_icc();
   if (raw_profile) {
     memcpy(out_data,
            raw_profile->get_data().data(),
            raw_profile->get_data().size());
+  }
+  else {
+    Error err(heif_error_Color_profile_does_not_exist,
+              heif_suberror_Unspecified);
+    return err.error_struct(handle->image.get());
   }
 
   return Error::Ok.error_struct(handle->image.get());
 }
 
 
-
 enum heif_color_profile_type heif_image_get_color_profile_type(const struct heif_image* image)
 {
-  auto profile = image->image->get_color_profile();
+  std::shared_ptr<const color_profile> profile;
+
+  profile = image->image->get_color_profile_icc();
+  if (!profile) {
+    profile = image->image->get_color_profile_nclx();
+  }
+
   if (!profile) {
     return heif_color_profile_type_not_present;
   }
   else {
-    return (heif_color_profile_type)profile->get_type();
+    return (heif_color_profile_type) profile->get_type();
   }
 }
 
 
 size_t heif_image_get_raw_color_profile_size(const struct heif_image* image)
 {
-  auto profile = image->image->get_color_profile();
-  auto raw_profile = std::dynamic_pointer_cast<const color_profile_raw>(profile);
+  auto raw_profile = image->image->get_color_profile_icc();
   if (raw_profile) {
     return raw_profile->get_data().size();
   }
@@ -1113,14 +1158,13 @@ size_t heif_image_get_raw_color_profile_size(const struct heif_image* image)
 struct heif_error heif_image_get_raw_color_profile(const struct heif_image* image,
                                                    void* out_data)
 {
-  if (out_data==nullptr) {
+  if (out_data == nullptr) {
     Error err(heif_error_Usage_error,
               heif_suberror_Null_pointer_argument);
     return err.error_struct(image->image.get());
   }
 
-  auto profile = image->image->get_color_profile();
-  auto raw_profile = std::dynamic_pointer_cast<const color_profile_raw>(profile);
+  auto raw_profile = image->image->get_color_profile_icc();
   if (raw_profile) {
     memcpy(out_data,
            raw_profile->get_data().data(),
@@ -1140,15 +1184,23 @@ struct heif_error heif_image_get_nclx_color_profile(const struct heif_image* ima
     return err.error_struct(image->image.get());
   }
 
-  auto profile = image->image->get_color_profile();
-  auto nclx_profile = std::dynamic_pointer_cast<const color_profile_nclx>(profile);
-  Error err = get_nclx_color_profile(nclx_profile, out_data);
+  auto nclx_profile = image->image->get_color_profile_nclx();
+  Error err = nclx_profile->get_nclx_color_profile(out_data);
 
   return err.error_struct(image->image.get());
 }
 
 
+struct heif_color_profile_nclx* heif_nclx_color_profile_alloc()
+{
+  return color_profile_nclx::alloc_nclx_color_profile();
+}
 
+
+void heif_nclx_color_profile_free(struct heif_color_profile_nclx* nclx_profile)
+{
+  color_profile_nclx::free_nclx_color_profile(nclx_profile);
+}
 
 
 // DEPRECATED
@@ -1156,7 +1208,8 @@ struct heif_error heif_register_decoder(heif_context* heif, const heif_decoder_p
 {
   if (!decoder_plugin) {
     return error_null_parameter;
-  } else if (decoder_plugin->plugin_api_version != 1) {
+  }
+  else if (decoder_plugin->plugin_api_version != 1) {
     return error_unsupported_plugin_version;
   }
 
@@ -1169,7 +1222,8 @@ struct heif_error heif_register_decoder_plugin(const heif_decoder_plugin* decode
 {
   if (!decoder_plugin) {
     return error_null_parameter;
-  } else if (decoder_plugin->plugin_api_version != 1) {
+  }
+  else if (decoder_plugin->plugin_api_version != 1) {
     return error_unsupported_plugin_version;
   }
 
@@ -1182,7 +1236,8 @@ struct heif_error heif_register_encoder_plugin(const heif_encoder_plugin* encode
 {
   if (!encoder_plugin) {
     return error_null_parameter;
-  } else if (encoder_plugin->plugin_api_version != 1) {
+  }
+  else if (encoder_plugin->plugin_api_version != 1) {
     return error_unsupported_plugin_version;
   }
 
@@ -1212,7 +1267,8 @@ void heif_context_reset(struct heif_context* ctx)
 */
 
 static struct heif_error heif_file_writer_write(struct heif_context* ctx,
-    const void* data, size_t size, void* userdata) {
+                                                const void* data, size_t size, void* userdata)
+{
   const char* filename = static_cast<const char*>(userdata);
 
   std::ofstream ostr(filename, std::ios_base::binary);
@@ -1228,7 +1284,7 @@ struct heif_error heif_context_write_to_file(struct heif_context* ctx,
   heif_writer writer;
   writer.writer_api_version = 1;
   writer.write = heif_file_writer_write;
-  return heif_context_write(ctx, &writer, (void*)filename);
+  return heif_context_write(ctx, &writer, (void*) filename);
 }
 
 
@@ -1239,7 +1295,8 @@ struct heif_error heif_context_write(struct heif_context* ctx,
   if (!writer) {
     return Error(heif_error_Usage_error,
                  heif_suberror_Null_pointer_argument).error_struct(ctx->context.get());
-  } else if (writer->writer_api_version != 1) {
+  }
+  else if (writer->writer_api_version != 1) {
     Error err(heif_error_Usage_error, heif_suberror_Unsupported_writer_version);
     return err.error_struct(ctx->context.get());
   }
@@ -1266,7 +1323,7 @@ int heif_context_get_encoder_descriptors(struct heif_context* ctx,
   descriptors = get_filtered_encoder_descriptors(format, name);
 
   int i;
-  for (i=0 ; i < count && static_cast<size_t>(i) < descriptors.size() ; i++) {
+  for (i = 0; i < count && static_cast<size_t>(i) < descriptors.size(); i++) {
     out_encoder_descriptors[i] = descriptors[i];
   }
 
@@ -1286,17 +1343,37 @@ const char* heif_encoder_descriptor_get_id_name(const struct heif_encoder_descri
 }
 
 
+enum heif_compression_format
+heif_encoder_descriptor_get_compression_format(const struct heif_encoder_descriptor* descriptor)
+{
+  return descriptor->plugin->compression_format;
+}
+
+
+int heif_encoder_descriptor_supports_lossy_compression(const struct heif_encoder_descriptor* descriptor)
+{
+  return descriptor->plugin->supports_lossy_compression;
+}
+
+
+int heif_encoder_descriptor_supports_lossless_compression(const struct heif_encoder_descriptor* descriptor)
+{
+  return descriptor->plugin->supports_lossless_compression;
+}
+
+
+// DEPRECATED: typo in functino name
 int heif_encoder_descriptor_supportes_lossy_compression(const struct heif_encoder_descriptor* descriptor)
 {
   return descriptor->plugin->supports_lossy_compression;
 }
 
 
+// DEPRECATED: typo in functino name
 int heif_encoder_descriptor_supportes_lossless_compression(const struct heif_encoder_descriptor* descriptor)
 {
   return descriptor->plugin->supports_lossless_compression;
 }
-
 
 
 const char* heif_encoder_get_name(const struct heif_encoder* encoder)
@@ -1309,23 +1386,16 @@ struct heif_error heif_context_get_encoder(struct heif_context* context,
                                            const struct heif_encoder_descriptor* descriptor,
                                            struct heif_encoder** encoder)
 {
+  // Note: be aware that context may be NULL as we explicitly allowed that in an earlier documentation.
+
   if (!descriptor || !encoder) {
-    return Error(heif_error_Usage_error,
-                 heif_suberror_Null_pointer_argument).error_struct(nullptr);
+    Error err(heif_error_Usage_error,
+              heif_suberror_Null_pointer_argument);
+    return err.error_struct(context ? context->context.get() : nullptr);
   }
 
-  if (context==nullptr) {
-    *encoder = new struct heif_encoder(nullptr, descriptor->plugin);
-  }
-  else {
-    // DEPRECATED. We do not need the context anywhere.
-    *encoder = new struct heif_encoder(context->context, descriptor->plugin);
-  }
-
-  (*encoder)->alloc();
-
-  struct heif_error err = { heif_error_Ok, heif_suberror_Unspecified, kSuccess };
-  return err;
+  *encoder = new struct heif_encoder(descriptor->plugin);
+  return (*encoder)->alloc();
 }
 
 
@@ -1347,32 +1417,25 @@ struct heif_error heif_context_get_encoder_for_format(struct heif_context* conte
                                                       enum heif_compression_format format,
                                                       struct heif_encoder** encoder)
 {
+  // Note: be aware that context may be NULL as we explicitly allowed that in an earlier documentation.
+
   if (!encoder) {
-    return Error(heif_error_Usage_error,
-                 heif_suberror_Null_pointer_argument).error_struct(nullptr);
+    Error err(heif_error_Usage_error,
+              heif_suberror_Null_pointer_argument);
+    return err.error_struct(context ? context->context.get() : nullptr);
   }
 
   std::vector<const struct heif_encoder_descriptor*> descriptors;
   descriptors = get_filtered_encoder_descriptors(format, nullptr);
 
-  if (descriptors.size()>0) {
-    if (context==nullptr) {
-      *encoder = new struct heif_encoder(nullptr, descriptors[0]->plugin);
-    }
-    else {
-      // DEPRECATED. We do not need the context anywhere.
-      *encoder = new struct heif_encoder(context->context, descriptors[0]->plugin);
-    }
-
-    (*encoder)->alloc();
-
-    struct heif_error err = { heif_error_Ok, heif_suberror_Unspecified, kSuccess };
-    return err;
+  if (descriptors.size() > 0) {
+    *encoder = new struct heif_encoder(descriptors[0]->plugin);
+    return (*encoder)->alloc();
   }
   else {
-    struct heif_error err = { heif_error_Unsupported_filetype, // TODO: is this the right error code?
-                              heif_suberror_Unspecified, kSuccess };
-    return err;
+    Error err(heif_error_Unsupported_filetype, // TODO: is this the right error code?
+              heif_suberror_Unspecified);
+    return err.error_struct(context ? context->context.get() : nullptr);
   }
 }
 
@@ -1399,7 +1462,7 @@ void heif_encoder_release(struct heif_encoder* encoder)
 // Set a 'quality' factor (0-100). How this is mapped to actual encoding parameters is
 // encoder dependent.
 struct heif_error heif_encoder_set_lossy_quality(struct heif_encoder* encoder,
-                                                int quality)
+                                                 int quality)
 {
   if (!encoder) {
     return Error(heif_error_Usage_error,
@@ -1432,12 +1495,12 @@ struct heif_error heif_encoder_set_logging_level(struct heif_encoder* encoder, i
     return encoder->plugin->set_parameter_logging_level(encoder->encoder, level);
   }
 
-  struct heif_error err = { heif_error_Ok, heif_suberror_Unspecified, kSuccess };
+  struct heif_error err = {heif_error_Ok, heif_suberror_Unspecified, kSuccess};
   return err;
 }
 
 
-const struct heif_encoder_parameter*const* heif_encoder_list_parameters(struct heif_encoder* encoder)
+const struct heif_encoder_parameter* const* heif_encoder_list_parameters(struct heif_encoder* encoder)
 {
   return encoder->plugin->list_parameters(encoder->encoder);
 }
@@ -1459,6 +1522,47 @@ struct heif_error heif_encoder_set_parameter_integer(struct heif_encoder* encode
                                                      const char* parameter_name,
                                                      int value)
 {
+  // --- check if parameter is valid
+
+  for (const struct heif_encoder_parameter* const* params = heif_encoder_list_parameters(encoder);
+       *params;
+       params++) {
+    if (strcmp((*params)->name, parameter_name) == 0) {
+
+      int have_minimum = 0, have_maximum = 0, minimum = 0, maximum = 0, num_valid_values = 0;
+      const int* valid_values;
+      heif_error err = heif_encoder_parameter_get_valid_integer_values((*params), &have_minimum, &have_maximum,
+                                                                       &minimum, &maximum,
+                                                                       &num_valid_values,
+                                                                       &valid_values);
+      if (err.code) {
+        return err;
+      }
+
+      if ((have_minimum && value < minimum) ||
+          (have_maximum && value > maximum)) {
+        return error_invalid_parameter_value;
+      }
+
+      if (num_valid_values > 0) {
+        bool found = false;
+        for (int i = 0; i < num_valid_values; i++) {
+          if (valid_values[i] == value) {
+            found = true;
+            break;
+          }
+        }
+
+        if (!found) {
+          return error_invalid_parameter_value;
+        }
+      }
+    }
+  }
+
+
+  // --- parameter is ok, pass it to the encoder plugin
+
   return encoder->plugin->set_parameter_integer(encoder->encoder, parameter_name, value);
 }
 
@@ -1495,9 +1599,58 @@ heif_encoder_parameter_get_valid_integer_range(const struct heif_encoder_paramet
   return error_Ok;
 }
 
+LIBHEIF_API
+struct heif_error heif_encoder_parameter_get_valid_integer_values(const struct heif_encoder_parameter* param,
+                                                                  int* have_minimum, int* have_maximum,
+                                                                  int* minimum, int* maximum,
+                                                                  int* num_valid_values,
+                                                                  const int** out_integer_array)
+{
+  if (param->type != heif_encoder_parameter_type_integer) {
+    return error_unsupported_parameter; // TODO: correct error ?
+  }
+
+
+  // --- range of values
+
+  if (param->integer.have_minimum_maximum) {
+    if (minimum) {
+      *minimum = param->integer.minimum;
+    }
+
+    if (maximum) {
+      *maximum = param->integer.maximum;
+    }
+  }
+
+  if (have_minimum) {
+    *have_minimum = param->integer.have_minimum_maximum;
+  }
+
+  if (have_maximum) {
+    *have_maximum = param->integer.have_minimum_maximum;
+  }
+
+
+  // --- set of valid values
+
+  if (param->integer.num_valid_values > 0) {
+    if (out_integer_array) {
+      *out_integer_array = param->integer.valid_values;
+    }
+  }
+
+  if (num_valid_values) {
+    *num_valid_values = param->integer.num_valid_values;
+  }
+
+  return error_Ok;
+}
+
+
 struct heif_error
 heif_encoder_parameter_get_valid_string_values(const struct heif_encoder_parameter* param,
-                                               const char*const** out_stringarray)
+                                               const char* const** out_stringarray)
 {
   if (param->type != heif_encoder_parameter_type_string) {
     return error_unsupported_parameter; // TODO: correct error ?
@@ -1515,10 +1668,10 @@ struct heif_error heif_encoder_parameter_integer_valid_range(struct heif_encoder
                                                              int* have_minimum_maximum,
                                                              int* minimum, int* maximum)
 {
-  for (const struct heif_encoder_parameter*const* params = heif_encoder_list_parameters(encoder);
+  for (const struct heif_encoder_parameter* const* params = heif_encoder_list_parameters(encoder);
        *params;
        params++) {
-    if (strcmp((*params)->name, parameter_name)==0) {
+    if (strcmp((*params)->name, parameter_name) == 0) {
       return heif_encoder_parameter_get_valid_integer_range(*params, have_minimum_maximum,
                                                             minimum, maximum);
     }
@@ -1558,12 +1711,12 @@ struct heif_error heif_encoder_get_parameter_string(struct heif_encoder* encoder
 
 struct heif_error heif_encoder_parameter_string_valid_values(struct heif_encoder* encoder,
                                                              const char* parameter_name,
-                                                             const char*const** out_stringarray)
+                                                             const char* const** out_stringarray)
 {
-  for (const struct heif_encoder_parameter*const* params = heif_encoder_list_parameters(encoder);
+  for (const struct heif_encoder_parameter* const* params = heif_encoder_list_parameters(encoder);
        *params;
        params++) {
-    if (strcmp((*params)->name, parameter_name)==0) {
+    if (strcmp((*params)->name, parameter_name) == 0) {
       return heif_encoder_parameter_get_valid_string_values(*params, out_stringarray);
     }
   }
@@ -1571,20 +1724,38 @@ struct heif_error heif_encoder_parameter_string_valid_values(struct heif_encoder
   return error_unsupported_parameter;
 }
 
+struct heif_error heif_encoder_parameter_integer_valid_values(struct heif_encoder* encoder,
+                                                              const char* parameter_name,
+                                                              int* have_minimum, int* have_maximum,
+                                                              int* minimum, int* maximum,
+                                                              int* num_valid_values,
+                                                              const int** out_integer_array)
+{
+  for (const struct heif_encoder_parameter* const* params = heif_encoder_list_parameters(encoder);
+       *params;
+       params++) {
+    if (strcmp((*params)->name, parameter_name) == 0) {
+      return heif_encoder_parameter_get_valid_integer_values(*params, have_minimum, have_maximum, minimum, maximum,
+                                                             num_valid_values, out_integer_array);
+    }
+  }
+
+  return error_unsupported_parameter;
+}
 
 
 static bool parse_boolean(const char* value)
 {
-  if (strcmp(value,"true")==0) {
+  if (strcmp(value, "true") == 0) {
     return true;
   }
-  else if (strcmp(value,"false")==0) {
+  else if (strcmp(value, "false") == 0) {
     return false;
   }
-  else if (strcmp(value,"1")==0) {
+  else if (strcmp(value, "1") == 0) {
     return true;
   }
-  else if (strcmp(value,"0")==0) {
+  else if (strcmp(value, "0") == 0) {
     return false;
   }
 
@@ -1596,20 +1767,20 @@ struct heif_error heif_encoder_set_parameter(struct heif_encoder* encoder,
                                              const char* parameter_name,
                                              const char* value)
 {
-  for (const struct heif_encoder_parameter*const* params = heif_encoder_list_parameters(encoder);
+  for (const struct heif_encoder_parameter* const* params = heif_encoder_list_parameters(encoder);
        *params;
        params++) {
-    if (strcmp((*params)->name, parameter_name)==0) {
+    if (strcmp((*params)->name, parameter_name) == 0) {
       switch ((*params)->type) {
-      case heif_encoder_parameter_type_integer:
-        return heif_encoder_set_parameter_integer(encoder, parameter_name, atoi(value));
+        case heif_encoder_parameter_type_integer:
+          return heif_encoder_set_parameter_integer(encoder, parameter_name, atoi(value));
 
-      case heif_encoder_parameter_type_boolean:
-        return heif_encoder_set_parameter_boolean(encoder, parameter_name, parse_boolean(value));
+        case heif_encoder_parameter_type_boolean:
+          return heif_encoder_set_parameter_boolean(encoder, parameter_name, parse_boolean(value));
 
-      case heif_encoder_parameter_type_string:
-        return heif_encoder_set_parameter_string(encoder, parameter_name, value);
-        break;
+        case heif_encoder_parameter_type_string:
+          return heif_encoder_set_parameter_string(encoder, parameter_name, value);
+          break;
       }
 
       return error_Ok;
@@ -1626,46 +1797,43 @@ struct heif_error heif_encoder_get_parameter(struct heif_encoder* encoder,
                                              const char* parameter_name,
                                              char* value_ptr, int value_size)
 {
-  for (const struct heif_encoder_parameter*const* params = heif_encoder_list_parameters(encoder);
+  for (const struct heif_encoder_parameter* const* params = heif_encoder_list_parameters(encoder);
        *params;
        params++) {
-    if (strcmp((*params)->name, parameter_name)==0) {
+    if (strcmp((*params)->name, parameter_name) == 0) {
       switch ((*params)->type) {
-      case heif_encoder_parameter_type_integer:
-        {
+        case heif_encoder_parameter_type_integer: {
           int value;
           struct heif_error error = heif_encoder_get_parameter_integer(encoder, parameter_name, &value);
           if (error.code) {
             return error;
           }
           else {
-            snprintf(value_ptr, value_size, "%d",value);
+            snprintf(value_ptr, value_size, "%d", value);
           }
         }
-        break;
+          break;
 
-      case heif_encoder_parameter_type_boolean:
-        {
+        case heif_encoder_parameter_type_boolean: {
           int value;
           struct heif_error error = heif_encoder_get_parameter_boolean(encoder, parameter_name, &value);
           if (error.code) {
             return error;
           }
           else {
-            snprintf(value_ptr, value_size, "%d",value);
+            snprintf(value_ptr, value_size, "%d", value);
           }
         }
-        break;
+          break;
 
-      case heif_encoder_parameter_type_string:
-        {
+        case heif_encoder_parameter_type_string: {
           struct heif_error error = heif_encoder_get_parameter_string(encoder, parameter_name,
                                                                       value_ptr, value_size);
           if (error.code) {
             return error;
           }
         }
-        break;
+          break;
       }
 
       return error_Ok;
@@ -1679,10 +1847,10 @@ struct heif_error heif_encoder_get_parameter(struct heif_encoder* encoder,
 int heif_encoder_has_default(struct heif_encoder* encoder,
                              const char* parameter_name)
 {
-  for (const struct heif_encoder_parameter*const* params = heif_encoder_list_parameters(encoder);
+  for (const struct heif_encoder_parameter* const* params = heif_encoder_list_parameters(encoder);
        *params;
        params++) {
-    if (strcmp((*params)->name, parameter_name)==0) {
+    if (strcmp((*params)->name, parameter_name) == 0) {
 
       if ((*params)->version >= 2) {
         return (*params)->has_default;
@@ -1699,9 +1867,11 @@ int heif_encoder_has_default(struct heif_encoder* encoder,
 
 static void set_default_options(heif_encoding_options& options)
 {
-  options.version = 1;
+  options.version = 3;
 
   options.save_alpha_channel = true;
+  options.macOS_compatibility_workaround = true;
+  options.save_two_colr_boxes_when_ICC_and_nclx_available = false;
 }
 
 
@@ -1732,7 +1902,7 @@ struct heif_error heif_context_encode_image(struct heif_context* ctx,
   }
 
   heif_encoding_options default_options;
-  if (options==nullptr) {
+  if (options == nullptr) {
     set_default_options(default_options);
     options = &default_options;
   }
@@ -1785,7 +1955,7 @@ struct heif_error heif_context_encode_thumbnail(struct heif_context* ctx,
   std::shared_ptr<HeifContext::Image> thumbnail_image;
 
   heif_encoding_options default_options;
-  if (options==nullptr) {
+  if (options == nullptr) {
     set_default_options(default_options);
     options = &default_options;
   }
@@ -1797,7 +1967,8 @@ struct heif_error heif_context_encode_thumbnail(struct heif_context* ctx,
                                                thumbnail_image);
   if (error != Error::Ok) {
     return error.error_struct(ctx->context.get());
-  } else if (!thumbnail_image) {
+  }
+  else if (!thumbnail_image) {
     Error err(heif_error_Usage_error,
               heif_suberror_Invalid_parameter_value,
               "Thumbnail images must be smaller than the original image.");

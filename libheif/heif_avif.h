@@ -21,9 +21,8 @@
 #ifndef HEIF_AVIF_H
 #define HEIF_AVIF_H
 
-#include <assert.h>
-#include <math.h>
-
+#include <cassert>
+#include <cmath>
 #include <memory>
 
 #include "heif.h"
@@ -33,9 +32,9 @@
 
 namespace heif {
 
-class HeifPixelImage;
-  
-Error fill_av1C_configuration(Box_av1C::configuration* inout_config, std::shared_ptr<HeifPixelImage>);
+  class HeifPixelImage;
+
+  Error fill_av1C_configuration(Box_av1C::configuration* inout_config, std::shared_ptr<HeifPixelImage>);
 
 }
 

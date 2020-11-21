@@ -27,48 +27,63 @@
 #include "config.h"
 #endif
 
-#include "string.h"
+#include <cstring>
 
 #if defined(HAVE_UNISTD_H)
+
 #include <unistd.h>
+
 #endif
+
 #include <fstream>
 #include <iostream>
 #include <sstream>
-#include <assert.h>
+#include <cassert>
 #include <algorithm>
+#include <vector>
 #include <cctype>
 
 #include <libheif/heif.h>
 
 #include "encoder.h"
+
 #if HAVE_LIBJPEG
+
 #include "encoder_jpeg.h"
+
 #endif
 #if HAVE_LIBPNG
+
 #include "encoder_png.h"
+
 #endif
+
 #include "encoder_y4m.h"
 
-#if defined(_MSC_VER)
+#if defined(__MINGW32__)  || defined(__MINGW64__) || defined(_MSC_VER)
 #include "getopt.h"
 #endif
 
 #define UNUSED(x) (void)x
 
-static int usage(const char* command) {
+static int usage(const char* command)
+{
   fprintf(stderr, "USAGE: %s [-q quality 0..100] <filename> <output>\n", command);
   return 1;
 }
 
-class ContextReleaser {
- public:
-  ContextReleaser(struct heif_context* ctx) : ctx_(ctx) {}
-  ~ContextReleaser() {
+class ContextReleaser
+{
+public:
+  ContextReleaser(struct heif_context* ctx) : ctx_(ctx)
+  {}
+
+  ~ContextReleaser()
+  {
     heif_context_free(ctx_);
   }
 
- private:
+private:
   struct heif_context* ctx_;
 };
 
@@ -79,11 +94,11 @@ int main(int argc, char** argv)
   UNUSED(quality);  // The quality will only be used by encoders that support it.
   while ((opt = getopt(argc, argv, "q:")) != -1) {
     switch (opt) {
-    case 'q':
-      quality = atoi(optarg);
-      break;
-    default: /* '?' */
-      return usage(argv[0]);
+      case 'q':
+        quality = atoi(optarg);
+        break;
+      default: /* '?' */
+        return usage(argv[0]);
     }
   }
 
@@ -99,7 +114,7 @@ int main(int argc, char** argv)
 
   size_t dot_pos = output_filename.rfind('.');
   if (dot_pos != std::string::npos) {
-    std::string suffix_lowercase = output_filename.substr(dot_pos+1);
+    std::string suffix_lowercase = output_filename.substr(dot_pos + 1);
 
     std::transform(suffix_lowercase.begin(), suffix_lowercase.end(),
                    suffix_lowercase.begin(), ::tolower);
@@ -145,8 +160,8 @@ int main(int argc, char** argv)
 
   std::ifstream istr(input_filename.c_str(), std::ios_base::binary);
   uint8_t magic[12];
-  istr.read((char*)magic,12);
-  enum heif_filetype_result filetype_check = heif_check_filetype(magic,12);
+  istr.read((char*) magic, 12);
+  enum heif_filetype_result filetype_check = heif_check_filetype(magic, 12);
   if (filetype_check == heif_filetype_no) {
     fprintf(stderr, "Input file is not an HEIF/AVIF file\n");
     return 1;
@@ -183,8 +198,8 @@ int main(int argc, char** argv)
 
   printf("File contains %d images\n", num_images);
 
-  heif_item_id* image_IDs = (heif_item_id*)alloca(num_images * sizeof(heif_item_id));
-  num_images = heif_context_get_list_of_top_level_image_IDs(ctx, image_IDs, num_images);
+  std::vector<heif_item_id> image_IDs(num_images);
+  num_images = heif_context_get_list_of_top_level_image_IDs(ctx, image_IDs.data(), num_images);
 
 
   std::string filename;
@@ -192,13 +207,14 @@ int main(int argc, char** argv)
 
   for (int idx = 0; idx < num_images; ++idx) {
 
-    if (num_images>1) {
+    if (num_images > 1) {
       std::ostringstream s;
       s << output_filename.substr(0, output_filename.find_last_of('.'));
       s << "-" << image_index;
       s << output_filename.substr(output_filename.find_last_of('.'));
       filename.assign(s.str());
-    } else {
+    }
+    else {
       filename.assign(output_filename);
     }
 
@@ -237,10 +253,11 @@ int main(int argc, char** argv)
     }
 
     if (image) {
-      bool written = encoder->Encode(handle, image, filename.c_str());
+      bool written = encoder->Encode(handle, image, filename);
       if (!written) {
-        fprintf(stderr,"could not write image\n");
-      } else {
+        fprintf(stderr, "could not write image\n");
+      }
+      else {
         printf("Written to %s\n", filename.c_str());
       }
       heif_image_release(image);
@@ -250,8 +267,8 @@ int main(int argc, char** argv)
       if (has_depth) {
         heif_item_id depth_id;
         int nDepthImages = heif_image_handle_get_list_of_depth_image_IDs(handle, &depth_id, 1);
-        assert(nDepthImages==1);
-        (void)nDepthImages;
+        assert(nDepthImages == 1);
+        (void) nDepthImages;
 
         struct heif_image_handle* depth_handle;
         err = heif_image_handle_get_depth_image_handle(handle, depth_id, &depth_handle);
@@ -261,13 +278,13 @@ int main(int argc, char** argv)
           return 1;
         }
 
-        int bit_depth = heif_image_handle_get_luma_bits_per_pixel(depth_handle);
+        int depth_bit_depth = heif_image_handle_get_luma_bits_per_pixel(depth_handle);
 
         struct heif_image* depth_image;
         err = heif_decode_image(depth_handle,
                                 &depth_image,
                                 encoder->colorspace(false),
-                                encoder->chroma(false, bit_depth),
+                                encoder->chroma(false, depth_bit_depth),
                                 nullptr);
         if (err.code) {
           heif_image_handle_release(depth_handle);
@@ -283,8 +300,9 @@ int main(int argc, char** argv)
 
         written = encoder->Encode(depth_handle, depth_image, s.str());
         if (!written) {
-          fprintf(stderr,"could not write depth image\n");
-        } else {
+          fprintf(stderr, "could not write depth image\n");
+        }
+        else {
           printf("Depth image written to %s\n", s.str().c_str());
         }
       }

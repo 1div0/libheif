@@ -20,16 +20,30 @@ set -e
 # along with libheif.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-BUILD_ROOT=$TRAVIS_BUILD_DIR
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
+BUILD_ROOT=$ROOT/..
+
+PKG_CONFIG_PATH=
 if [ "$WITH_LIBDE265" = "2" ]; then
-    export PKG_CONFIG_PATH=$BUILD_ROOT/libde265/dist/lib/pkgconfig/
+    PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$BUILD_ROOT/libde265/dist/lib/pkgconfig/"
+fi
+
+if [ "$WITH_RAV1E" = "1" ]; then
+    PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$BUILD_ROOT/third-party/rav1e/dist/lib/pkgconfig/"
+fi
+
+if [ "$WITH_DAV1D" = "1" ]; then
+    PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$BUILD_ROOT/third-party/dav1d/dist/lib/x86_64-linux-gnu/pkgconfig/"
+fi
+if [ ! -z "$PKG_CONFIG_PATH" ]; then
+    export PKG_CONFIG_PATH="$PKG_CONFIG_PATH"
 fi
 
 CONFIGURE_HOST=
-if [ ! -z "$MINGW32" ]; then
+if [ "$MINGW" == "32" ]; then
     CONFIGURE_HOST=i686-w64-mingw32
-elif [ ! -z "$MINGW64" ]; then
+elif [ "$MINGW" == "64" ]; then
     CONFIGURE_HOST=x86_64-w64-mingw32
 fi
 
@@ -41,8 +55,8 @@ if [ -z "$CHECK_LICENSES" ] && [ -z "$CPPLINT" ] && [ -z "$CMAKE" ]; then
             export CC="$BUILD_ROOT/clang/bin/clang"
             export CXX="$BUILD_ROOT/clang/bin/clang++"
             FUZZER_FLAGS="-fsanitize=fuzzer-no-link,address,shift,integer -fno-sanitize-recover=shift,integer"
-            export CFLAGS="$CFLAGS $FUZZER_FLAGS"
-            export CXXFLAGS="$CXXFLAGS $FUZZER_FLAGS"
+            export CFLAGS="$CFLAGS -g -O0 $FUZZER_FLAGS"
+            export CXXFLAGS="$CXXFLAGS -g -O0 $FUZZER_FLAGS"
             CONFIGURE_ARGS="$CONFIGURE_ARGS --enable-libfuzzer=-fsanitize=fuzzer"
         fi
     else
@@ -58,6 +72,9 @@ if [ -z "$CHECK_LICENSES" ] && [ -z "$CPPLINT" ] && [ -z "$CMAKE" ]; then
     fi
     if [ ! -z "$TESTS" ]; then
         CONFIGURE_ARGS="$CONFIGURE_ARGS --enable-tests"
+    fi
+    if [ "$WITH_RAV1E" = "1" ]; then
+        CONFIGURE_ARGS="$CONFIGURE_ARGS --enable-local-rav1e"
     fi
     ./configure $CONFIGURE_ARGS
 fi

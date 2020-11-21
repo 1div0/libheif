@@ -20,8 +20,18 @@ set -e
 # along with libheif.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-INSTALL_PACKAGES=
+INSTALL_PACKAGES="\
+    autoconf \
+    automake \
+    pkg-config \
+    "
 REMOVE_PACKAGES=
+
+if [ ! -z "$WITH_AOM" ]; then
+    INSTALL_PACKAGES="$INSTALL_PACKAGES \
+        aom \
+        "
+fi
 
 if [ ! -z "$WITH_LIBDE265" ]; then
     INSTALL_PACKAGES="$INSTALL_PACKAGES \
