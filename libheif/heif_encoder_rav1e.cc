@@ -36,7 +36,7 @@
 
 #include <iostream>  // TODO: remove me
 
-#include "rav1e.h"
+#include <rav1e/rav1e.h>
 
 
 struct encoder_struct_rav1e
